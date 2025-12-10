@@ -2,8 +2,9 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const cookieParser = require("cookie-parser");
 const crypto = require("crypto");
-// bcrypt is installed but NOT used in the vulnerable baseline:
 const bcrypt = require("bcrypt");
+const csrf = require("csurf");
+const rateLimit = require("express-rate-limit");
 
 const app = express();
 const PORT = 3001;
@@ -12,6 +13,15 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 app.use(cookieParser());
 app.use(express.static("public"));
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100
+});
+app.use(limiter);
+
+const csrfProtection = csrf({ cookie: true });
+app.use(csrfProtection);
 
 /**
  * VULNERABLE FAKE USER DB
@@ -28,14 +38,6 @@ const users = [
 
 // In-memory session store
 const sessions = {}; // token -> { userId }
-
-/**
- * VULNERABLE FAST HASH FUNCTION
- * Students MUST STOP using this and replace logic with bcrypt.
- */
-function fastHash(password) {
-  return crypto.createHash("sha256").update(password).digest("hex");
-}
 
 // Helper: find user by username
 function findUser(username) {

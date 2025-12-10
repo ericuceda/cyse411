@@ -5,6 +5,8 @@ const cors = require("cors");
 const sqlite3 = require("sqlite3").verbose();
 const crypto = require("crypto");
 const bcrypt = require("bcrypt");
+const csrf = require("csurf");
+const rateLimit = require("express-rate-limit");
 
 const app = express();
 
@@ -18,6 +20,15 @@ app.use(
 
 app.use(bodyParser.json());
 app.use(cookieParser());
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100
+});
+app.use(limiter);
+
+const csrfProtection = csrf({ cookie: true });
+app.use(csrfProtection);
 
 // --- IN-MEMORY SQLITE DB (clean) ---
 const db = new sqlite3.Database(":memory:");
@@ -60,10 +71,6 @@ db.serialize(() => {
 
 // --- SESSION STORE (simple, predictable token exactly like assignment) ---
 const sessions = {};
-
-function fastHash(pwd) {
-  return bcrypt.hashSync(pwd, 10);
-}
 
 function auth(req, res, next) {
   const sid = req.cookies.sid;
