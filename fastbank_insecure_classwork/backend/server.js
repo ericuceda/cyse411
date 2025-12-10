@@ -4,6 +4,7 @@ const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const sqlite3 = require("sqlite3").verbose();
 const crypto = require("crypto");
+const bcrypt = require("bcrypt");
 
 const app = express();
 
@@ -48,10 +49,10 @@ db.serialize(() => {
     );
   `);
 
-  const passwordHash = crypto.createHash("sha256").update("password123").digest("hex");
+  const passwordHash = bcrypt.hashSync("password123", 10);
 
   db.run(`INSERT INTO users (username, password_hash, email)
-          VALUES ('alice', '${passwordHash}', 'alice@example.com');`);
+          VALUES ('alice', ?, 'alice@example.com');`, [passwordHash]);
 
   db.run(`INSERT INTO transactions (user_id, amount, description) VALUES (1, 25.50, 'Coffee shop')`);
   db.run(`INSERT INTO transactions (user_id, amount, description) VALUES (1, 100, 'Groceries')`);
@@ -61,7 +62,7 @@ db.serialize(() => {
 const sessions = {};
 
 function fastHash(pwd) {
-  return crypto.createHash("sha256").update(pwd).digest("hex");
+  return bcrypt.hashSync(pwd, 10);
 }
 
 function auth(req, res, next) {
@@ -79,20 +80,20 @@ function auth(req, res, next) {
 app.post("/login", (req, res) => {
   const { username, password } = req.body;
 
-  const sql = `SELECT id, username, password_hash FROM users WHERE username = '${username}'`;
+  const sql = `SELECT id, username, password_hash FROM users WHERE username = ?`;
 
-  db.get(sql, (err, user) => {
+  db.get(sql, [username], (err, user) => {
     if (!user) return res.status(404).json({ error: "Unknown username" });
 
-    const candidate = fastHash(password);
-    if (candidate !== user.password_hash) {
+    const validPassword = bcrypt.compareSync(password, user.password_hash);
+    if (!validPassword) {
       return res.status(401).json({ error: "Wrong password" });
     }
 
     const sid = `${username}-${Date.now()}`; // predictable
     sessions[sid] = { userId: user.id };
 
-    // Cookie is intentionally “normal” (not HttpOnly / secure)
+    // Cookie is intentionally "normal" (not HttpOnly / secure)
     res.cookie("sid", sid, {});
 
     res.json({ success: true });
@@ -116,11 +117,11 @@ app.get("/transactions", auth, (req, res) => {
   const sql = `
     SELECT id, amount, description
     FROM transactions
-    WHERE user_id = ${req.user.id}
-      AND description LIKE '%${q}%'
+    WHERE user_id = ?
+      AND description LIKE ?
     ORDER BY id DESC
   `;
-  db.all(sql, (err, rows) => res.json(rows));
+  db.all(sql, [req.user.id, `%${q}%`], (err, rows) => res.json(rows));
 });
 
 // ------------------------------------------------------------
@@ -130,14 +131,14 @@ app.post("/feedback", auth, (req, res) => {
   const comment = req.body.comment;
   const userId = req.user.id;
 
-  db.get(`SELECT username FROM users WHERE id = ${userId}`, (err, row) => {
+  db.get(`SELECT username FROM users WHERE id = ?`, [userId], (err, row) => {
     const username = row.username;
 
     const insert = `
       INSERT INTO feedback (user, comment)
-      VALUES ('${username}', '${comment}')
+      VALUES (?, ?)
     `;
-    db.run(insert, () => {
+    db.run(insert, [username, comment], () => {
       res.json({ success: true });
     });
   });
@@ -158,9 +159,9 @@ app.post("/change-email", auth, (req, res) => {
   if (!newEmail.includes("@")) return res.status(400).json({ error: "Invalid email" });
 
   const sql = `
-    UPDATE users SET email = '${newEmail}' WHERE id = ${req.user.id}
+    UPDATE users SET email = ? WHERE id = ?
   `;
-  db.run(sql, () => {
+  db.run(sql, [newEmail, req.user.id], () => {
     res.json({ success: true, email: newEmail });
   });
 });

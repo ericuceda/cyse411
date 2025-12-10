@@ -22,8 +22,7 @@ const users = [
   {
     id: 1,
     username: "student",
-    // VULNERABLE: fast hash without salt
-    passwordHash: fastHash("password123") // students must replace this scheme with bcrypt
+    passwordHash: bcrypt.hashSync("password123", 10)
   }
 ];
 
@@ -72,8 +71,8 @@ app.post("/api/login", (req, res) => {
       .json({ success: false, message: "Unknown username" });
   }
 
-  const candidateHash = fastHash(password);
-  if (candidateHash !== user.passwordHash) {
+  const validPassword = bcrypt.compareSync(password, user.passwordHash);
+  if (!validPassword) {
     return res
       .status(401)
       .json({ success: false, message: "Wrong password" });

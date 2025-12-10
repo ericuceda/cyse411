@@ -32,16 +32,7 @@ jobs:
         working-directory: fastbank_insecure_classwork/backend
         run: |
           npm start &
-          sleep 5
-          echo "Waiting for server to be ready..."
-          for i in {1..30}; do
-            if curl -s http://localhost:4000 > /dev/null; then
-              echo "Server is up!"
-              break
-            fi
-            echo "Waiting... ($i/30)"
-            sleep 2
-          done
+          sleep 30
 
       - name: Run OWASP ZAP full scan
         uses: zaproxy/action-full-scan@v0.13.0
